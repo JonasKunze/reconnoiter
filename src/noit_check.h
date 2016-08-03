@@ -445,4 +445,5 @@ MTEV_HOOK_PROTO(check_deleted,
                 void *, closure,
                 (void *closure, noit_check_t *check));
 
+
 #endif
