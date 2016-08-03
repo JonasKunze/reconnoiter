@@ -75,6 +75,7 @@
 #include "noit_metric_director.h"
 #include "noit_check_tools_shared.h"
 #include "noit_check.h"
+#include "noit_cluster.h"
 
 #define APPNAME "noit"
 #define CHILD_WATCHDOG_TIMEOUT 5 /*seconds*/
@@ -271,7 +272,7 @@ static int child_main() {
   }
 
   mtev_listener_init(APPNAME);
-  mtev_cluster_init();
+  noit_cluster_init();
   noit_metric_director_init();
 
   /* Drop privileges */
