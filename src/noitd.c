@@ -244,6 +244,8 @@ static int child_main() {
   /* Initialized shared tools */
   noit_check_tools_shared_init();
 
+  noit_cluster_init();
+
   /* Initialize all of our listeners */
   mtev_console_init(APPNAME);
   mtev_console_conf_init();
@@ -272,7 +274,6 @@ static int child_main() {
   }
 
   mtev_listener_init(APPNAME);
-  noit_cluster_init();
   noit_metric_director_init();
 
   /* Drop privileges */
