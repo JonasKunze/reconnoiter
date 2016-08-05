@@ -61,6 +61,13 @@ typedef struct {
 } request_hdr_t;
 
 typedef struct {
+  mtev_cluster_node_t node;
+  const char* outbuff;
+  uint send_size;
+  uint write_sofar;
+} send_job_t;
+
+typedef struct {
   request_hdr_t next_hdr;
   uint8_t read_so_far;
 } request_ctx_t;
@@ -182,6 +189,58 @@ handle_check_request(eventer_t e, int mask, void *closure,
   return newmask | EVENTER_EXCEPTION;
 }
 
+static int
+mtev_cluster_send_connection_complete(eventer_t e, int mask, void *closure,
+    struct timeval *now) {
+  int rv;
+  int write_mask = EVENTER_EXCEPTION;
+  send_job_t *job = closure;
+
+  while((rv = e->opset->write(e->fd,
+      job->outbuff + job->write_sofar, job->send_size - job->write_sofar, &write_mask, e)) > 0) {
+    job->write_sofar += rv;
+    if(job->write_sofar == job->send_size) break;
+  }
+  if(rv < 0) {
+    return -1;
+  }
+  eventer_remove_fd(e->fd);
+  e->opset->close(e->fd, &newmask, e);
+  eventer_free(e);
+  return 0;
+}
+
+static int
+mtev_cluster_send(const mtev_cluster_node_t *node, const char *data, uint data_len) {
+
+  int fd, rv;
+  eventer_t e;
+  union {
+    struct sockaddr_in addr4;
+    struct sockaddr_in6 addr6;
+  } addr;
+  addr.addr6 = node->addr.addr6;
+  addr.addr4.sin_port = htons(node->data_port);
+  fd = socket(AF_INET,SOCK_STREAM,IPPROTO_TCP);
+  rv = connect(fd, (struct sockaddr*)&addr, node->address_len);
+  if(rv == -1) return -1;
+
+  send_job_t *job = malloc(sizeof(send_job_t));
+  job->node = *node;
+  job->outbuff = data;
+  job->send_size = data_len;
+
+  /* Register a handler for connection completion */
+  e = eventer_alloc();
+  e->fd = fd;
+  e->mask = EVENTER_READ | EVENTER_WRITE | EVENTER_EXCEPTION;
+  e->callback = mtev_cluster_send_connection_complete;
+  e->closure = job;
+  eventer_add(e);
+
+  return 1;
+}
+
 void
 noit_cluster_init() {
   mtev_cluster_t *cluster;
@@ -211,4 +270,11 @@ noit_cluster_init() {
   }
 
   eventer_name_callback("noit_cluster_network", handle_check_request);
+
+
+  mtev_cluster_node_t *nodes[10];
+  mtev_cluster_get_nodes(cluster, nodes, 10, mtev_false);
+
+  mtev_cluster_send(nodes[0], "asdf", 4);
+
 }
