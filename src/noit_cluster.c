@@ -111,9 +111,14 @@ handle_check_request(void *closure, eventer_t e, const char* data, uint data_len
   return mtev_cluster_messaging_send_response(e, msg, strlen(msg), NULL);
 }
 
+static int cnt = 0;
 static int
-handle_response(eventer_t e, const char *data, uint data_len, void *closure) {
-  mtev_cluster_messaging_send_request(e, "asd", 3, NULL, handle_response);
+handle_response(void* closure, eventer_t e, const char *data, uint data_len) {
+  if(cnt++ <1000) {
+    mtev_cluster_messaging_send_request(e, "asd", 3, NULL, handle_response);
+  } else {
+    mtev_cluster_messaging_disconnect(e);
+  }
   mtevL(noit_notice, "Received response : %s\n", data);
   return 0;
 }
@@ -147,15 +152,18 @@ noit_cluster_init() {
   }
 
   mtev_cluster_messaging_init(CLUSTER_NAME);
-  mtev_cluster_messaging_received_hook_register("cluster-messaging-listener",
+  mtev_cluster_messaging_request_hook_register("cluster-messaging-listener",
       handle_check_request, NULL);
 
   mtev_cluster_node_t *nodes[10];
   int cluster_size = mtev_cluster_get_nodes(cluster, nodes, 10, mtev_false);
 
   eventer_t connection = mtev_cluster_messaging_connect(nodes[0]);
-  if(connection)
-    mtev_cluster_messaging_send_request(connection, "asd", 3, NULL, handle_response);
-  else
+  if(connection) {
+    int *closure = malloc(sizeof(int));
+    *closure = 1234;
+    mtev_cluster_messaging_send_request(connection, "asd", 3, NULL, handle_response, closure);
+  } else {
     mtevL(noit_notice, "Unable to connect to %d\n", nodes[0]->data_port);
+  }
 }
