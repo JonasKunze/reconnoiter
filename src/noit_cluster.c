@@ -60,41 +60,6 @@ typedef struct {
   int64_t last_seen_revision;
 } request_hdr_t;
 
-typedef struct {
-  mtev_cluster_node_t node;
-  const char* outbuff;
-  uint send_size;
-  uint write_sofar;
-} send_job_t;
-
-typedef struct {
-  request_hdr_t next_hdr;
-  uint8_t read_so_far;
-} request_ctx_t;
-
-static request_ctx_t*
-request_ctx_alloc() {
-  return calloc(1, sizeof(request_ctx_t));
-}
-
-static void
-request_ctx_free(void* data) {
-  request_ctx_t *ctx = data;
-  free(ctx);
-}
-
-static request_hdr_t
-request_hdr_new() {
-  request_hdr_t hdr;
-  hdr.version = 0;
-  return hdr;
-}
-
-static void
-ntoh_request_hdr(request_hdr_t *hdr) {
-
-}
-
 static void
 free_history_entry(void* data) {
   history_entry_t *entry;
@@ -136,109 +101,21 @@ on_node_updated(void *closure,
 
   return MTEV_HOOK_CONTINUE;
 }
-static mtev_boolean
-read_next_hdr(eventer_t e, request_ctx_t *ctx) {
-  int len;
 
-  len = e->opset->read(e->fd, ((char*)&ctx->next_hdr) + ctx->read_so_far, sizeof(request_hdr_t) - ctx->read_so_far, &newmask, e);
-  if(len == 0 || (len < 0 && errno != EAGAIN)) {
-    eventer_remove_fd(e->fd);
-    e->opset->close(e->fd, &newmask, e);
-    return 0;
-  }
+static int
+handle_check_request(void *closure, eventer_t e, const char* data, uint data_length) {
+  mtevL(noit_notice, "Received cluster message: %s\n", data);
+  int mask;
+  char *msg = "hello world!";
 
-  if(len > 0) {
-    ctx->read_so_far += len;
-
-    if(ctx->read_so_far == sizeof(request_hdr_t)) {
-      ctx->read_so_far = 0;
-      ntoh_request_hdr(&ctx->next_hdr);
-      return mtev_true;
-    }
-  }
-
-  return mtev_false;
+  return mtev_cluster_messaging_send_response(e, msg, strlen(msg), NULL);
 }
 
 static int
-handle_check_request(eventer_t e, int mask, void *closure,
-    struct timeval *now) {
-  acceptor_closure_t *ac = closure;
-  request_ctx_t *ctx = ac->service_ctx;
-
-  if(mask & EVENTER_EXCEPTION) {
-    /* Exceptions cause us to simply snip the connection */
-
-    /* This removes the log feed which is important to do before calling close */
-    eventer_remove_fd(e->fd);
-    e->opset->close(e->fd, &newmask, e);
-    return 0;
-  }
-
-  if(!ac->service_ctx) {
-    ctx = ac->service_ctx = request_ctx_alloc();
-    ac->service_ctx_free = request_ctx_free;
-  }
-
-  if(read_next_hdr(e, ctx) == mtev_true) {
-
-  }
-
-  mtevL(noit_notice, "Bytes read: %d\n", ctx->read_so_far);
-
-  return newmask | EVENTER_EXCEPTION;
-}
-
-static int
-mtev_cluster_send_connection_complete(eventer_t e, int mask, void *closure,
-    struct timeval *now) {
-  int rv;
-  int write_mask = EVENTER_EXCEPTION;
-  send_job_t *job = closure;
-
-  while((rv = e->opset->write(e->fd,
-      job->outbuff + job->write_sofar, job->send_size - job->write_sofar, &write_mask, e)) > 0) {
-    job->write_sofar += rv;
-    if(job->write_sofar == job->send_size) break;
-  }
-  if(rv < 0) {
-    return -1;
-  }
-  eventer_remove_fd(e->fd);
-  e->opset->close(e->fd, &newmask, e);
-  eventer_free(e);
+handle_response(eventer_t e, const char *data, uint data_len, void *closure) {
+  mtev_cluster_messaging_send_request(e, "asd", 3, NULL, handle_response);
+  mtevL(noit_notice, "Received response : %s\n", data);
   return 0;
-}
-
-static int
-mtev_cluster_send(const mtev_cluster_node_t *node, const char *data, uint data_len) {
-
-  int fd, rv;
-  eventer_t e;
-  union {
-    struct sockaddr_in addr4;
-    struct sockaddr_in6 addr6;
-  } addr;
-  addr.addr6 = node->addr.addr6;
-  addr.addr4.sin_port = htons(node->data_port);
-  fd = socket(AF_INET,SOCK_STREAM,IPPROTO_TCP);
-  rv = connect(fd, (struct sockaddr*)&addr, node->address_len);
-  if(rv == -1) return -1;
-
-  send_job_t *job = malloc(sizeof(send_job_t));
-  job->node = *node;
-  job->outbuff = data;
-  job->send_size = data_len;
-
-  /* Register a handler for connection completion */
-  e = eventer_alloc();
-  e->fd = fd;
-  e->mask = EVENTER_READ | EVENTER_WRITE | EVENTER_EXCEPTION;
-  e->callback = mtev_cluster_send_connection_complete;
-  e->closure = job;
-  eventer_add(e);
-
-  return 1;
 }
 
 void
@@ -261,7 +138,7 @@ noit_cluster_init() {
       exit(1);
     }
     assert(
-        mtev_cluster_enable_payload(cluster, (void*) &my_revision,
+        mtev_cluster_set_heartbeat_payload(cluster, 1, 1, (void*) &my_revision,
             sizeof(my_revision)));
 
     check_history = jl_array_list_new(free_history_entry);
@@ -269,12 +146,16 @@ noit_cluster_init() {
     mtevL(noit_notice, "Didn't find any cluster in the config files\n");
   }
 
-  eventer_name_callback("noit_cluster_network", handle_check_request);
-
+  mtev_cluster_messaging_init(CLUSTER_NAME);
+  mtev_cluster_messaging_received_hook_register("cluster-messaging-listener",
+      handle_check_request, NULL);
 
   mtev_cluster_node_t *nodes[10];
-  mtev_cluster_get_nodes(cluster, nodes, 10, mtev_false);
+  int cluster_size = mtev_cluster_get_nodes(cluster, nodes, 10, mtev_false);
 
-  mtev_cluster_send(nodes[0], "asdf", 4);
-
+  eventer_t connection = mtev_cluster_messaging_connect(nodes[0]);
+  if(connection)
+    mtev_cluster_messaging_send_request(connection, "asd", 3, NULL, handle_response);
+  else
+    mtevL(noit_notice, "Unable to connect to %d\n", nodes[0]->data_port);
 }
