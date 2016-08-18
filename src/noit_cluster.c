@@ -93,17 +93,8 @@ on_check_deleted(void *closure, noit_check_t *check) {
   return MTEV_HOOK_CONTINUE;
 }
 
-static mtev_hook_return_t
-on_node_updated(void *closure,
-    mtev_cluster_node_t *updated_node, mtev_cluster_t *cluster,
-    struct timeval old_boot_time) {
-  //int64_t *other_revision = updated_node->payload;
-
-  return MTEV_HOOK_CONTINUE;
-}
-
 static int
-handle_check_request(void *closure, eventer_t e, const char* data, uint data_length) {
+handle_request(void *closure, eventer_t e, const char* data, uint data_length) {
   mtevL(noit_notice, "Received cluster message: %s\n", data);
   int mask;
   char *msg = "hello world!";
@@ -121,6 +112,28 @@ handle_response(void* closure, eventer_t e, const char *data, uint data_len) {
   }
   mtevL(noit_notice, "Received response : %s\n", data);
   return 0;
+}
+
+static mtev_hook_return_t
+on_node_updated(void *closure, mtev_cluster_node_changes node_change,
+    mtev_cluster_node_t *node, mtev_cluster_t *cluster,
+    struct timeval old_boot_time) {
+  //int64_t *other_revision = node->payload;
+  if(mtev_cluster_is_that_me(node) == mtev_true) {
+    return MTEV_HOOK_CONTINUE;
+  }
+
+  eventer_t connection = mtev_cluster_messaging_connect(node);
+  if(connection) {
+    int *closure = malloc(sizeof(int));
+    *closure = 1234;
+    mtev_cluster_messaging_send_request(connection, "asd", 3, NULL,
+        handle_response, closure);
+  } else {
+    mtevL(noit_notice, "Unable to connect to %d\n", node->data_port);
+  }
+
+  return MTEV_HOOK_CONTINUE;
 }
 
 void
@@ -153,17 +166,5 @@ noit_cluster_init() {
 
   mtev_cluster_messaging_init(CLUSTER_NAME);
   mtev_cluster_messaging_request_hook_register("cluster-messaging-listener",
-      handle_check_request, NULL);
-
-  mtev_cluster_node_t *nodes[10];
-  int cluster_size = mtev_cluster_get_nodes(cluster, nodes, 10, mtev_false);
-
-  eventer_t connection = mtev_cluster_messaging_connect(nodes[0]);
-  if(connection) {
-    int *closure = malloc(sizeof(int));
-    *closure = 1234;
-    mtev_cluster_messaging_send_request(connection, "asd", 3, NULL, handle_response, closure);
-  } else {
-    mtevL(noit_notice, "Unable to connect to %d\n", nodes[0]->data_port);
-  }
+      handle_request, NULL);
 }
