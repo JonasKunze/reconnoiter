@@ -45,7 +45,6 @@
 static mtev_atomic64_t my_revision = 0;
 
 static struct jl_array_list *check_history;
-static int newmask = EVENTER_READ | EVENTER_EXCEPTION;
 
 typedef struct {
   uuid_t uuid;
@@ -115,7 +114,7 @@ handle_response(void* closure, eventer_t e, const char *data, uint data_len) {
 }
 
 static mtev_hook_return_t
-on_node_updated(void *closure, mtev_cluster_node_changes node_change,
+on_node_updated(void *closure, mtev_cluster_node_changes_t node_change,
     mtev_cluster_node_t *node, mtev_cluster_t *cluster,
     struct timeval old_boot_time) {
   //int64_t *other_revision = node->payload;
