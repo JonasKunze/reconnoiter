@@ -244,8 +244,6 @@ static int child_main() {
   /* Initialized shared tools */
   noit_check_tools_shared_init();
 
-  noit_cluster_init();
-
   /* Initialize all of our listeners */
   mtev_console_init(APPNAME);
   mtev_console_conf_init();
@@ -293,6 +291,8 @@ static int child_main() {
   mtev_conf_write_log(NULL);
   mtev_conf_coalesce_changes(10); /* 10 seconds of no changes before we write */
   mtev_conf_watch_and_journal_watchdog(mtev_conf_write_log, NULL);
+
+  noit_cluster_init();
 
   eventer_loop();
   return 0;

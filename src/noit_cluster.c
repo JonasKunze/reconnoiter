@@ -30,7 +30,6 @@
 
 #include <mtev_cluster.h>
 #include <mtev_atomic.h>
-#include <mtev_arraylist.h>
 #include <mtev_listener.h>
 
 #include <uuid/uuid.h>
@@ -42,9 +41,8 @@
 
 #define CLUSTER_NAME "noit"
 
-static mtev_atomic64_t my_revision = 0;
-
-static struct jl_array_list *check_history;
+static mtev_atomic64_t largest_seq = 0;
+static mtev_boolean initializing = mtev_true;
 
 typedef struct {
   uuid_t uuid;
@@ -60,42 +58,38 @@ typedef struct {
 } request_hdr_t;
 
 static void
-free_history_entry(void* data) {
-  history_entry_t *entry;
-  entry = data;
-  if(entry->name)
-    free(entry->name);
-  free(entry);
-}
-
-static void
-add_history_entry(noit_check_t *check, mtev_boolean check_deleted) {
-  history_entry_t *entry = malloc(sizeof(history_entry_t));
-  jl_array_list_add(check_history, entry);
-
-  memcpy(&entry->uuid, &check->checkid, sizeof(check->checkid));
-  entry->name = strdup(check->name);
-  entry->check_deleted = check_deleted;
+on_check_updated(noit_check_t *check) {
+  // replace my_revision with check->conf_seq if this is larger than my_revision
+  while(largest_seq < check->config_seq && mtev_atomic_cas64(&largest_seq, check->config_seq, largest_seq) != largest_seq) {
+  }
 }
 
 static mtev_hook_return_t
-on_check_updated(void *closure, noit_check_t *check) {
-  add_history_entry(check, mtev_false);
-  mtev_atomic_inc64(&my_revision);
+on_check_updated_cb(void *closure, noit_check_t *check) {
+  assert(initializing == mtev_false && "noit_cluster_init must be called after all checks are loaded!");
+
+  if(check->config_seq <= largest_seq) {
+    char uuid_str[UUID_PRINTABLE_STRING_LENGTH];
+    uuid_unparse(check->checkid, uuid_str);
+    mtevL(noit_error, "Saw a check with a sequence smaller or equal then the largest one ever seen: %s\n",
+              uuid_str);
+    return MTEV_HOOK_CONTINUE;
+  }
+
+  on_check_updated(check);
+
   return MTEV_HOOK_CONTINUE;
 }
 
-static mtev_hook_return_t
-on_check_deleted(void *closure, noit_check_t *check) {
-  add_history_entry(check, mtev_true);
-  mtev_atomic_inc64(&my_revision);
-  return MTEV_HOOK_CONTINUE;
+static int
+noit_poller_cb(noit_check_t * check, void *closure) {
+  on_check_updated(check);
+  return 1;
 }
 
 static int
 handle_request(void *closure, eventer_t e, const char* data, uint data_length) {
   mtevL(noit_notice, "Received cluster message: %s\n", data);
-  int mask;
   char *msg = "hello world!";
 
   return mtev_cluster_messaging_send_response(e, msg, strlen(msg), NULL);
@@ -142,9 +136,9 @@ noit_cluster_init() {
   if(mtev_cluster_enabled() == mtev_true) {
     mtevL(noit_notice, "Initializing noit cluster\n");
     check_updated_hook_register("cluster-check-update-listener",
-        on_check_updated, NULL);
+        on_check_updated_cb, NULL);
     check_deleted_hook_register("cluster-check-delete-listener",
-        on_check_deleted, NULL);
+        on_check_updated_cb, NULL);
     mtev_cluster_handle_node_update_hook_register("cluster-topology-listener",
         on_node_updated, NULL);
 
@@ -155,10 +149,8 @@ noit_cluster_init() {
       exit(1);
     }
     assert(
-        mtev_cluster_set_heartbeat_payload(cluster, 1, 1, (void*) &my_revision,
-            sizeof(my_revision)));
-
-    check_history = jl_array_list_new(free_history_entry);
+        mtev_cluster_set_heartbeat_payload(cluster, 1, 1, (void*) &largest_seq,
+            sizeof(largest_seq)));
   } else {
     mtevL(noit_notice, "Didn't find any cluster in the config files\n");
   }
@@ -166,4 +158,7 @@ noit_cluster_init() {
   mtev_cluster_messaging_init(CLUSTER_NAME);
   mtev_cluster_messaging_request_hook_register("cluster-messaging-listener",
       handle_request, NULL);
+
+  noit_poller_do(noit_poller_cb, NULL);
+  initializing = mtev_false;
 }
