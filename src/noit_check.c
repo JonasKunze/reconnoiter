@@ -1604,25 +1604,32 @@ noit_poller_target_do(const char *target, int (*f)(noit_check_t *, void *),
 }
 
 int
-noit_poller_do(int (*f)(noit_check_t *, void *),
-               void *closure) {
+noit_get_checks(int64_t min_seq, noit_check_t*** checks_return) {
+  int count = 0, max_count = 0;
   mtev_skiplist_node *iter;
-  int i, count = 0, max_count = 0;
-  noit_check_t **todo;
-
-  if(polls_by_name.size == 0) return 0;
+  if(polls_by_name.size == 0)
+    return 0;
 
   max_count = polls_by_name.size;
-  todo = malloc(max_count * sizeof(*todo));
+  *checks_return = malloc(max_count * sizeof(noit_check_t*));
 
   pthread_mutex_lock(&polls_lock);
   for(iter = mtev_skiplist_getlist(&polls_by_name); iter;
       mtev_skiplist_next(&polls_by_name, &iter)) {
-    if(count < max_count) todo[count++] = (noit_check_t *)iter->data;
+    if(count < max_count)
+      (*checks_return)[count++] = (noit_check_t *) iter->data;
   }
   pthread_mutex_unlock(&polls_lock);
+  return count;
+}
 
-  max_count = count;
+int
+noit_poller_do(int (*f)(noit_check_t *, void *),
+               void *closure) {
+  int max_count, count, i;
+  noit_check_t **todo;
+
+  max_count = noit_get_checks(0, &todo);
   count = 0;
   for(i=0;i<max_count;i++)
     count += f(todo[i], closure);

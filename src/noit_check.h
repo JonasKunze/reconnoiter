@@ -243,6 +243,14 @@ API_EXPORT(int)
                   noit_check_t *check);
 
 API_EXPORT(int)
+   noit_poller_do(int (*f)(noit_check_t *, void *),
+                  void *closure);
+
+API_EXPORT(int)
+   noit_get_checks(int64_t min_seq, noit_check_t*** checks_return);
+
+
+API_EXPORT(int)
   noit_check_xpath(char *xpath, int len,
                    const char *base, const char *arg);
 API_EXPORT(char*)
