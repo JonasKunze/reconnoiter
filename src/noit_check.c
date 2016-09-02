@@ -1627,13 +1627,14 @@ int
 noit_poller_do(int (*f)(noit_check_t *, void *),
                void *closure) {
   int max_count, count, i;
-  noit_check_t **todo;
+  noit_check_t **todo = NULL;
 
   max_count = noit_get_checks(0, &todo);
   count = 0;
   for(i=0;i<max_count;i++)
     count += f(todo[i], closure);
-  free(todo);
+  if(todo)
+    free(todo);
   return count;
 }
 
