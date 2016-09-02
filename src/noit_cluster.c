@@ -31,6 +31,7 @@
 #include <mtev_cluster.h>
 #include <mtev_atomic.h>
 #include <mtev_listener.h>
+#include <mtev_str.h>
 
 #include <uuid/uuid.h>
 #include <errno.h>
@@ -38,6 +39,10 @@
 
 #include "noit_mtev_bridge.h"
 #include "noit_check.h"
+
+#include <libxml/parser.h>
+#include <libxml/tree.h>
+#include <libxml/xpath.h>
 
 #define CLUSTER_NAME "noit"
 
@@ -52,8 +57,6 @@ typedef struct {
 
 typedef struct {
   uint8_t version;
-  uuid_t requester_id;
-  struct timeval last_seen_boot_time;
   int64_t last_seen_revision;
 } request_hdr_t;
 
@@ -65,7 +68,7 @@ on_check_updated(noit_check_t *check) {
 }
 
 static mtev_hook_return_t
-on_check_updated_cb(void *closure, noit_check_t *check) {
+on_check_updated_listener(void *closure, noit_check_t *check) {
   assert(initializing == mtev_false && "noit_cluster_init must be called after all checks are loaded!");
 
   if(check->config_seq <= largest_seq) {
@@ -89,10 +92,33 @@ noit_poller_cb(noit_check_t * check, void *closure) {
 
 static int
 handle_request(void *closure, eventer_t e, const char* data, uint data_length) {
-  mtevL(noit_notice, "Received cluster message: %s\n", data);
-  char *msg = "hello world!";
+  assert(data_length == sizeof(request_hdr_t));
+  request_hdr_t *request = (request_hdr_t*) data;
+  noit_check_t **checks, *current_check;
+  int number_of_checks, i, msg_len;
+  mtev_str_buff_t *str_buff = mtev_str_buff_alloc_sized(0);
 
-  return mtev_cluster_messaging_send_response(e, msg, strlen(msg), NULL);
+
+  mtevL(noit_notice, "Received cluster message\n");
+
+
+  number_of_checks = noit_get_checks(request->last_seen_revision + 1, &checks);
+  for(i = 0; i != number_of_checks; i++) {
+    current_check = checks[i];
+    xmlDocPtr doc = noit_get_check_xml_doc(current_check);
+
+    xmlChar *s;
+    int size;
+    xmlDocDumpMemory(doc, &s, &size);
+    if(doc)
+        xmlFreeDoc(doc);
+
+    int len = mtev_str_buff_len(str_buff);
+    mtev_append_str_buff(str_buff, s, size);
+  }
+  msg_len = mtev_str_buff_len(str_buff);
+  char *msg = mtev_str_buff_to_string(str_buff);
+  return mtev_cluster_messaging_send_response(e, msg, strlen(msg), free);
 }
 
 static int cnt = 0;
@@ -129,6 +155,18 @@ on_node_updated(void *closure, mtev_cluster_node_changes_t node_change,
   return MTEV_HOOK_CONTINUE;
 }
 
+static void
+test() {
+  mtev_str_buff_t *str_buff = mtev_str_buff_alloc_sized(0);
+  int len = mtev_str_buff_len(str_buff);
+  mtev_append_str_buff(str_buff, "hello", sizeof("hello")-1);
+  mtev_append_str_buff(str_buff, " world", sizeof(" world")-1);
+  len = mtev_str_buff_len(str_buff);
+
+  int msg_len = mtev_str_buff_len(str_buff);
+  char *msg = mtev_str_buff_to_string(&str_buff);
+}
+
 void
 noit_cluster_init() {
   mtev_cluster_t *cluster;
@@ -136,9 +174,9 @@ noit_cluster_init() {
   if(mtev_cluster_enabled() == mtev_true) {
     mtevL(noit_notice, "Initializing noit cluster\n");
     check_updated_hook_register("cluster-check-update-listener",
-        on_check_updated_cb, NULL);
+        on_check_updated_listener, NULL);
     check_deleted_hook_register("cluster-check-delete-listener",
-        on_check_updated_cb, NULL);
+        on_check_updated_listener, NULL);
     mtev_cluster_handle_node_update_hook_register("cluster-topology-listener",
         on_node_updated, NULL);
 
@@ -161,4 +199,7 @@ noit_cluster_init() {
 
   noit_poller_do(noit_poller_cb, NULL);
   initializing = mtev_false;
+
+
+  test();
 }
