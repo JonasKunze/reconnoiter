@@ -29,6 +29,7 @@
  */
 
 #include <mtev_cluster.h>
+#include <mtev_cluster_messaging.h>
 #include <mtev_atomic.h>
 #include <mtev_listener.h>
 #include <mtev_str.h>
@@ -36,6 +37,7 @@
 #include <uuid/uuid.h>
 #include <errno.h>
 #include <stdint.h>
+#include <inttypes.h>
 
 #include "noit_mtev_bridge.h"
 #include "noit_check.h"
@@ -90,7 +92,7 @@ noit_poller_cb(noit_check_t * check, void *closure) {
   return 1;
 }
 
-static int
+static mtev_hook_return_t
 handle_request(void *closure, eventer_t e, const char* data, uint data_length) {
   assert(data_length == sizeof(request_hdr_t));
   request_hdr_t *request = (request_hdr_t*) data;
@@ -98,7 +100,7 @@ handle_request(void *closure, eventer_t e, const char* data, uint data_length) {
   int number_of_checks, i, msg_len;
   mtev_str_buff_t *str_buff = mtev_str_buff_alloc_sized(0);
 
-  mtevL(noit_notice, "Recieved request: %d\n", request->last_seen_revision);
+  mtevL(noit_notice, "Recieved request: %"PRId64"\n", request->last_seen_revision);
 
   number_of_checks = noit_get_checks(request->last_seen_revision + 1, &checks);
   for(i = 0; i != number_of_checks; i++) {
@@ -111,25 +113,29 @@ handle_request(void *closure, eventer_t e, const char* data, uint data_length) {
     if(doc)
         xmlFreeDoc(doc);
 
-    int len = mtev_str_buff_len(str_buff);
-    mtev_append_str_buff(str_buff, s, size);
+    mtev_append_str_buff(str_buff, (char*)s, size);
   }
   msg_len = mtev_str_buff_len(str_buff);
   char *msg = mtev_str_buff_to_string(&str_buff);
   mtevL(noit_notice, "Sent response: %s\n", msg);
-  return mtev_cluster_messaging_send_response(e, msg, msg_len, free);
+
+  if(mtev_cluster_messaging_send_response(e, msg, msg_len, free) == 0) {
+    mtevL(noit_error, "Unable to send cluster response\n");
+  }
+
+  return MTEV_HOOK_CONTINUE;
 }
 
-static int cnt = 0;
-static int
+//static int cnt = 0;
+static mtev_hook_return_t
 handle_response(void* closure, eventer_t e, const void *data, uint data_len) {
 //  if(cnt++ <1000) {
 //    mtev_cluster_messaging_send_request(e, "asd", 3, NULL, handle_response);
 //  } else {
 //    mtev_cluster_messaging_disconnect(e);
 //  }
-  mtevL(noit_notice, "Received response : %s\n", data);
-  return 0;
+  mtevL(noit_notice, "Received response : %s\n", (char*)data);
+  return MTEV_HOOK_CONTINUE;
 }
 
 static mtev_hook_return_t
@@ -153,26 +159,14 @@ on_node_updated(void *closure, mtev_cluster_node_changes_t node_change,
 
       int *closure = malloc(sizeof(int));
       *closure = 1234;
-      mtev_cluster_messaging_send_request(connection, request, sizeof(*request), free,
+      mtev_cluster_messaging_send_request(connection, (char*)request, sizeof(*request), free,
           handle_response, closure);
-      mtevL(noit_notice, "Sent request: %d\n", request->last_seen_revision);
+      mtevL(noit_notice, "Sent request: %" PRId64 "\n", request->last_seen_revision);
     } else {
       mtevL(noit_notice, "Unable to connect to %d\n", node->data_port);
     }
   }
   return MTEV_HOOK_CONTINUE;
-}
-
-static void
-test() {
-  mtev_str_buff_t *str_buff = mtev_str_buff_alloc_sized(0);
-  int len = mtev_str_buff_len(str_buff);
-  mtev_append_str_buff(str_buff, "hello", sizeof("hello")-1);
-  mtev_append_str_buff(str_buff, " world", sizeof(" world")-1);
-  len = mtev_str_buff_len(str_buff);
-
-  int msg_len = mtev_str_buff_len(str_buff);
-  char *msg = mtev_str_buff_to_string(&str_buff);
 }
 
 void
@@ -207,7 +201,4 @@ noit_cluster_init() {
 
   noit_poller_do(noit_poller_cb, NULL);
   initializing = mtev_false;
-
-
-  test();
 }
