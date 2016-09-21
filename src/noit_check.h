@@ -257,9 +257,6 @@ API_EXPORT(int)
 API_EXPORT(int)
    noit_get_checks(int64_t min_seq, noit_check_t*** checks_return);
 
-API_EXPORT(xmlDocPtr)
-   noit_get_check_xml_doc(noit_check_t *check);
-
 API_EXPORT(int)
   noit_check_xpath_check(char *xpath, int len,
                   noit_check_t *check);

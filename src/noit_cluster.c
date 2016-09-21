@@ -111,16 +111,18 @@ handle_request(void *closure, eventer_t e, const char* data, uint data_length) {
     int size;
     xmlDocDumpMemory(doc, &s, &size);
     if(doc)
-        xmlFreeDoc(doc);
+      xmlFreeDoc(doc);
 
     mtev_append_str_buff(str_buff, (char*)s, size);
   }
+
   msg_len = mtev_str_buff_len(str_buff);
   char *msg = mtev_str_buff_to_string(&str_buff);
-  mtevL(noit_notice, "Sent response: %s\n", msg);
 
   if(mtev_cluster_messaging_send_response(e, msg, msg_len, free) == 0) {
-    mtevL(noit_error, "Unable to send cluster response\n");
+    mtevL(noit_error, "Unable to send cluster response: %s\n", msg);
+  } else {
+    mtevL(noit_notice, "Sent response: %s\n", msg);
   }
 
   return MTEV_HOOK_CONTINUE;
