@@ -222,17 +222,17 @@ API_EXPORT(int)
                                   noit_check_t **checks, int nchecks);
 
 API_EXPORT(int)
-   noit_poller_target_ip_do(const char *target,
+  noit_poller_target_ip_do(const char *target,
                             int (*f)(noit_check_t *, void *),
                             void *closure);
 
 API_EXPORT(int)
-   noit_poller_target_do(const char *target,
+  noit_poller_target_do(const char *target,
                          int (*f)(noit_check_t *, void *),
                          void *closure);
 
 API_EXPORT(int)
-   noit_poller_do(int (*f)(noit_check_t *, void *),
+  noit_poller_do(int (*f)(noit_check_t *, void *),
                   void *closure);
 
 API_EXPORT(xmlNodePtr)
@@ -243,19 +243,27 @@ API_EXPORT(int)
                   noit_check_t *check);
 
 API_EXPORT(int)
+  noit_poller_do(int (*f)(noit_check_t *, void *),
+                  void *closure);
+
+API_EXPORT(int)
+  noit_get_checks(int64_t min_seq, noit_check_t*** checks_return);
+
+<<<<<<< 3fe2f1f9f8b16db4c8a577631820b37de6e27373
+
+API_EXPORT(int)
    noit_poller_do(int (*f)(noit_check_t *, void *),
                   void *closure);
 
 API_EXPORT(int)
    noit_get_checks(int64_t min_seq, noit_check_t*** checks_return);
+=======
+xmlDocPtr
+  noit_generate_checks_xml_doc(int64_t min_seq);
 
-
-API_EXPORT(int)
-   noit_poller_do(int (*f)(noit_check_t *, void *),
-                  void *closure);
-
-API_EXPORT(int)
-   noit_get_checks(int64_t min_seq, noit_check_t*** checks_return);
+API_EXPORT(xmlNodePtr)
+  noit_get_check_xml_node(noit_check_t *check);
+>>>>>>> Implemented noit_generate_checks_xml_doc
 
 API_EXPORT(int)
   noit_check_xpath_check(char *xpath, int len,

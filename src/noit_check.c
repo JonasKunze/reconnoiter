@@ -1623,6 +1623,29 @@ noit_get_checks(int64_t min_seq, noit_check_t*** checks_return) {
   return count;
 }
 
+xmlDocPtr
+noit_generate_checks_xml_doc(int64_t min_seq) {
+  noit_check_t **checks, *current_check;
+  int number_of_checks, check_idx;
+
+  xmlDocPtr doc;
+  xmlNodePtr root;
+
+  doc = xmlNewDoc((xmlChar *) "1.0");
+  root = xmlNewDocNode(doc, NULL, (xmlChar *) "checks", NULL);
+  xmlDocSetRootElement(doc, root);
+
+  number_of_checks = noit_get_checks(min_seq, &checks);
+  for(check_idx = 0; check_idx != number_of_checks; check_idx++) {
+    current_check = checks[check_idx];
+    xmlNodePtr node = noit_get_check_xml_node(current_check);
+
+    node = xmlDocCopyNode(node, doc, 1);
+    xmlAddChild(root, node);
+  }
+
+  return doc;
+}
 int
 noit_poller_do(int (*f)(noit_check_t *, void *),
                void *closure) {
@@ -1679,6 +1702,7 @@ noit_get_check_xml_node(noit_check_t *check) {
   noit_check_xpath_check(xpath, sizeof(xpath), check);
 
   node = mtev_conf_get_section(NULL, xpath);
+<<<<<<< 3fe2f1f9f8b16db4c8a577631820b37de6e27373
 <<<<<<< 9781cb0cff1286239c5dda08fd6f076b5400eef6
   return node;
 =======
@@ -1690,6 +1714,9 @@ noit_get_check_xml_node(noit_check_t *check) {
   }
   return doc;
 >>>>>>> Bugfix: node has to be copied when put to other xml doc
+=======
+  return node;
+>>>>>>> Implemented noit_generate_checks_xml_doc
 }
 
 int

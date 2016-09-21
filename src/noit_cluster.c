@@ -96,30 +96,18 @@ static mtev_hook_return_t
 handle_request(void *closure, eventer_t e, const char* data, uint data_length) {
   assert(data_length == sizeof(request_hdr_t));
   request_hdr_t *request = (request_hdr_t*) data;
-  noit_check_t **checks, *current_check;
-  int number_of_checks, i, msg_len;
-  mtev_str_buff_t *str_buff = mtev_str_buff_alloc_sized(0);
+  int msg_len;
 
   mtevL(noit_notice, "Recieved request: %"PRId64"\n", request->last_seen_revision);
 
-  number_of_checks = noit_get_checks(request->last_seen_revision + 1, &checks);
-  for(i = 0; i != number_of_checks; i++) {
-    current_check = checks[i];
-    xmlDocPtr doc = noit_get_check_xml_doc(current_check);
+  xmlDocPtr doc = noit_generate_checks_xml_doc(request->last_seen_revision + 1);
 
-    xmlChar *s;
-    int size;
-    xmlDocDumpMemory(doc, &s, &size);
-    if(doc)
-      xmlFreeDoc(doc);
+  xmlChar *msg;
+  xmlDocDumpMemory(doc, &msg, &msg_len);
+  if(doc)
+    xmlFreeDoc(doc);
 
-    mtev_append_str_buff(str_buff, (char*)s, size);
-  }
-
-  msg_len = mtev_str_buff_len(str_buff);
-  char *msg = mtev_str_buff_to_string(&str_buff);
-
-  if(mtev_cluster_messaging_send_response(e, msg, msg_len, free) == 0) {
+  if(mtev_cluster_messaging_send_response(e, (char*)msg, msg_len, free) == 0) {
     mtevL(noit_error, "Unable to send cluster response: %s\n", msg);
   } else {
     mtevL(noit_notice, "Sent response: %s\n", msg);
