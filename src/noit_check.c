@@ -1623,13 +1623,45 @@ noit_get_checks(int64_t min_seq, noit_check_t*** checks_return) {
   return count;
 }
 
+static xmlNodePtr
+noit_create_paths(const xmlNodePtr root, const xmlNodePtr *path_nodes, int number_of_path_nodes) {
+  xmlNodePtr parent = root;
+  xmlNodePtr new_node;
+  int idx;
+  for(idx = 0; idx != number_of_path_nodes; ++idx) {
+    xmlNodePtr cur = parent->children;
+    while(cur != NULL){
+        if (!xmlStrcmp(cur->name, (path_nodes[idx])->name)){
+            goto found_it;
+        }
+        cur = parent->next;
+    }
+    // we didn't find the current node -> create the whole remaining path
+    for(; idx != number_of_path_nodes; ++idx) {
+      new_node = xmlDocCopyNode(path_nodes[idx], parent->doc, 2);
+      xmlAddChild(parent, new_node);
+      parent = new_node;
+    }
+    break;
+
+    found_it:
+    new_node = cur;
+    continue;
+  }
+  return new_node;
+}
+
 xmlDocPtr
 noit_generate_checks_xml_doc(int64_t min_seq) {
   noit_check_t **checks, *current_check;
   int number_of_checks, check_idx;
+  xmlNodePtr node, parent;
 
   xmlDocPtr doc;
-  xmlNodePtr root;
+  xmlNodePtr root, *first_path_node;
+  int number_of_path_nodes = 0;
+  const int max_path_nodes = 64;
+  xmlNodePtr path_nodes[max_path_nodes];
 
   doc = xmlNewDoc((xmlChar *) "1.0");
   root = xmlNewDocNode(doc, NULL, (xmlChar *) "checks", NULL);
@@ -1638,8 +1670,21 @@ noit_generate_checks_xml_doc(int64_t min_seq) {
   number_of_checks = noit_get_checks(min_seq, &checks);
   for(check_idx = 0; check_idx != number_of_checks; check_idx++) {
     current_check = checks[check_idx];
-    xmlNodePtr node = noit_get_check_xml_node(current_check);
+    node = noit_get_check_xml_node(current_check);
+    parent = node->parent;
+    while(parent && strcmp((char*)parent->name, CHECKS_XPATH_PARENT)) {
+      if(number_of_path_nodes == max_path_nodes) {
+        char xpath[1024];
+        noit_check_xpath_check(xpath, sizeof(xpath), current_check);
+        mtevL(noit_error, "Check exceeds max path length: %s\n", xpath);
+      }
 
+      path_nodes[max_path_nodes - 1 - number_of_path_nodes++] = parent;
+      parent = parent->parent;
+    }
+
+    first_path_node = &path_nodes[max_path_nodes - number_of_path_nodes];
+    root = noit_create_paths(root, first_path_node, number_of_path_nodes);
     node = xmlDocCopyNode(node, doc, 1);
     xmlAddChild(root, node);
   }
@@ -1741,7 +1786,7 @@ noit_check_xpath(char *xpath, int len,
 
   if(uuid_parse(argcopy, checkid) == 0) {
     /* If they kill by uuid, we'll seek and destroy -- find it anywhere */
-    snprintf(xpath, len, "/noit/checks%s%s/check[@uuid=\"%s\"]",
+    snprintf(xpath, len, CHECKS_XPATH_BASE"%s%s/check[@uuid=\"%s\"]",
              base, base_trailing_slash ? "" : "/", argcopy);
   }
   else if((module = strchr(argcopy, '`')) != NULL) {
