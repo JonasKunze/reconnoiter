@@ -560,13 +560,13 @@ missing_namespaces(xmlNodePtr ctx, xmlNodePtr q) {
   return 0;
 }
 int
-noit_validate_check_rest_post_node(xmlNodePtr root, xmlNodePtr *a, xmlNodePtr *c,
+noit_validate_check_rest_post(xmlDocPtr doc, xmlNodePtr *a, xmlNodePtr *c,
                               const char **error) {
   mtev_conf_section_t toplevel;
-  xmlNodePtr tl, an, master_config_root;
+  xmlNodePtr root, tl, an, master_config_root;
   int name=0, module=0, target=0, period=0, timeout=0, filterset=0;
   *a = *c = NULL;
-
+  root = xmlDocGetRootElement(doc);
   /* Make sure any present namespaces are in the master document already */
   toplevel = mtev_conf_get_section(NULL, "/*");
   master_config_root = (xmlNodePtr)toplevel; 
@@ -578,7 +578,7 @@ noit_validate_check_rest_post_node(xmlNodePtr root, xmlNodePtr *a, xmlNodePtr *c
     *error = "invalid namespace provided";
     return 0;
   }
-
+      
   if(strcmp((char *)root->name, "check")) return 0;
   for(tl = root->children; tl; tl = tl->next) {
     if(!strcmp((char *)tl->name, "attributes")) {
@@ -853,7 +853,7 @@ rest_delete_check(mtev_http_rest_closure_t *restc,
 }
 
 mtev_boolean
-noit_check_set_check(xmlNodePtr check_node, int npats, char **pats, const char **error_return, int *error_code) {
+noit_check_set_check(xmlDocPtr check_doc, int npats, char **pats, const char **error_return, int *error_code) {
   xmlXPathObjectPtr pobj = NULL;
   xmlXPathContextPtr xpath_ctxt = NULL;
   xmlNodePtr node, attr, config, parent;
@@ -867,8 +867,8 @@ noit_check_set_check(xmlNodePtr check_node, int npats, char **pats, const char *
 
   if(npats != 2) goto error;
 
-  if(check_node == NULL) FAIL("xml parse error");
-  if(!noit_validate_check_rest_post_node(check_node, &attr, &config, &error)) goto error;
+  if(check_doc == NULL) FAIL("xml parse error");
+  if(!noit_validate_check_rest_post(check_doc, &attr, &config, &error)) goto error;
 
   if(uuid_parse(pats[1], checkid)) goto error;
   check = noit_poller_lookup(checkid);
@@ -991,9 +991,7 @@ rest_set_check(mtev_http_rest_closure_t *restc,
 
   if(!complete) return mask;
 
-  if(indoc == NULL) FAIL("xml parse error");
-  root = xmlDocGetRootElement(indoc);
-  if(noit_check_set_check(root, npats, pats, &error, &error_code) == mtev_false) {
+  if(noit_check_set_check(indoc, npats, pats, &error, &error_code) == mtev_false) {
     goto error;
   }
 
@@ -1012,8 +1010,10 @@ rest_set_check(mtev_http_rest_closure_t *restc,
   mtev_http_response_xml(ctx, doc);
   mtev_http_response_end(ctx);
 
+ cleanup:
+  if(uuid_conf) xmlFree(uuid_conf);
+  if(pobj) xmlXPathFreeObject(pobj);
   if(doc) xmlFreeDoc(doc);
-
   return 0;
 }
 

@@ -116,15 +116,19 @@ handle_request(void *closure, eventer_t e, const char* data, uint data_length) {
   return MTEV_HOOK_CONTINUE;
 }
 
-//static int cnt = 0;
 static mtev_hook_return_t
 handle_response(void* closure, eventer_t e, const void *data, uint data_len) {
-//  if(cnt++ <1000) {
-//    mtev_cluster_messaging_send_request(e, "asd", 3, NULL, handle_response);
-//  } else {
-//    mtev_cluster_messaging_disconnect(e);
-//  }
+  xmlDocPtr doc;
+
   mtevL(noit_notice, "Received response : %s\n", (char*)data);
+
+  doc = xmlReadMemory(data, data_len, "checks.xml", NULL, 0);
+  if (doc == NULL) {
+      mtevL(noit_error, "Failed to parse cluster message response: %s\n", (char*)data);
+  } else {
+
+  }
+
   return MTEV_HOOK_CONTINUE;
 }
 
@@ -139,7 +143,7 @@ on_node_updated(void *closure, mtev_cluster_node_changes_t node_change,
 
   mtevL(noit_notice, "Other node changed: %d!!!!!!!!!\n", node_change);
 
-  if(node_change & (MTEV_CLUSTER_NODE_REBOOTED | MTEV_CLUSTER_NODE_CHANGED_PAYLOAD)) {
+  if(node_change & (MTEV_CLUSTER_NODE_REBOOTED /*| MTEV_CLUSTER_NODE_CHANGED_PAYLOAD*/)) {
     eventer_t connection = mtev_cluster_messaging_connect(node);
 
     if(connection) {
