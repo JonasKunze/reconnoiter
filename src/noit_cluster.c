@@ -41,6 +41,7 @@
 
 #include "noit_mtev_bridge.h"
 #include "noit_check.h"
+#include "noit_check_rest.h"
 
 #include <libxml/parser.h>
 #include <libxml/tree.h>
@@ -116,17 +117,72 @@ handle_request(void *closure, eventer_t e, const char* data, uint data_length) {
   return MTEV_HOOK_CONTINUE;
 }
 
+
+static void
+noit_check_set_recursive_dfs(xmlNodePtr node, char *path, int path_len)  {
+  char *next_path;
+  int next_path_len;
+  int name_len;
+  char *uuid;
+  char *pats[2];
+  const char *error = NULL;
+  int error_code = 0;
+
+  if(!strcmp((char*) node->name, "check")) {
+    uuid = (char*)xmlGetProp(node, (xmlChar*) "uuid");
+    if(uuid == NULL) {
+      mtevL(noit_error, "Found a check node in the cluster message response without a uuid!\n");
+    } else {
+      mtevL(noit_error, "Found check in xml message: %s\n", uuid);
+      pats[0] = path;
+      pats[1] = uuid;
+
+      noit_check_set_check(node, sizeof(pats), pats, &error, &error_code);
+      xmlFree(uuid);
+    }
+
+  } else {
+    name_len = xmlStrlen(node->name);
+    next_path_len = path_len + name_len + 1;
+    next_path = alloca(next_path_len);
+
+    memcpy(next_path, path, path_len);
+    memcpy(next_path + path_len, node->name, name_len);
+    next_path[next_path_len - 1] = '/';
+
+    node = node->children;
+    while(node != NULL) {
+      noit_check_set_recursive_dfs(node, path, next_path_len);
+      node = node->next;
+    };
+  }
+}
+
 static mtev_hook_return_t
 handle_response(void* closure, eventer_t e, const void *data, uint data_len) {
-  xmlDocPtr doc;
+  xmlDocPtr doc, check_doc;
+  xmlNodePtr node;
+  int npats;
+  const char *path = "/";
 
-  mtevL(noit_notice, "Received response : %s\n", (char*)data);
+  mtevL(noit_notice, "Received response : %s\n", (char* )data);
 
   doc = xmlReadMemory(data, data_len, "checks.xml", NULL, 0);
-  if (doc == NULL) {
-      mtevL(noit_error, "Failed to parse cluster message response: %s\n", (char*)data);
+  if(doc == NULL) {
+    mtevL(noit_error, "Failed to parse cluster message response: %s\n",
+        (char* )data);
   } else {
-
+    node = xmlDocGetRootElement(doc);
+    if(strcmp((char*) node->name, "checks")) {
+      mtevL(noit_error, " %s\n",
+              (char* )data);
+    } else {
+      node = node->children;
+      while(node != NULL) {
+        noit_check_set_recursive_dfs(node, path, 1);
+        node = node->next;
+      };
+    }
   }
 
   return MTEV_HOOK_CONTINUE;

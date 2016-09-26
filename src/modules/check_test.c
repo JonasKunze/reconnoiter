@@ -325,7 +325,8 @@ rest_test_check(mtev_http_rest_closure_t *restc,
     error = "xml parse error";
     goto error;
   }
-  if(!noit_validate_check_rest_post(indoc, &attr, &config, &error))
+  root = xmlDocGetRootElement(indoc);
+  if(!noit_validate_check_rest_post_node(root, &attr, &config, &error))
     goto error;
 
   tcheck = noit_fire_check(attr, config, &error);

@@ -1659,7 +1659,7 @@ noit_generate_checks_xml_doc(int64_t min_seq) {
 
   xmlDocPtr doc;
   xmlNodePtr root, *first_path_node;
-  int number_of_path_nodes = 0;
+  uint number_of_path_nodes = 0;
   const int max_path_nodes = 64;
   xmlNodePtr path_nodes[max_path_nodes];
 
@@ -1682,9 +1682,10 @@ noit_generate_checks_xml_doc(int64_t min_seq) {
       path_nodes[max_path_nodes - 1 - number_of_path_nodes++] = parent;
       parent = parent->parent;
     }
-
-    first_path_node = &path_nodes[max_path_nodes - number_of_path_nodes];
-    root = noit_create_paths(root, first_path_node, number_of_path_nodes);
+    if(number_of_path_nodes != 0) {
+      first_path_node = &path_nodes[max_path_nodes - number_of_path_nodes];
+      root = noit_create_paths(root, first_path_node, number_of_path_nodes);
+    }
     node = xmlDocCopyNode(node, doc, 1);
     xmlAddChild(root, node);
   }
