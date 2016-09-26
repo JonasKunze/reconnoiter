@@ -117,6 +117,30 @@ handle_request(void *closure, eventer_t e, const char* data, uint data_length) {
   return MTEV_HOOK_CONTINUE;
 }
 
+static void
+extract_attributes(xmlNodePtr node, char **uuid) {
+  xmlChar* value;
+  xmlAttr* attribute = node->properties;
+  xmlNodePtr attr_node, attributes;
+
+
+
+  attributes = xmlNewDocNode(node->doc, NULL, (xmlChar *) "attributes", NULL);
+  xmlAddChild(node, attributes);
+  while(attribute)
+  {
+    value = xmlNodeListGetString(node->doc, attribute->children, 1);
+    if(!strcmp((char*) attribute->name, "uuid")) {
+      *uuid = (char*)value;
+    } else {
+      attr_node = xmlNewDocNode(node->doc, NULL, attribute->name, NULL);
+      xmlAddChild(attributes, attr_node);
+
+      xmlFree(value);
+      attribute = attribute->next;
+    }
+  }
+}
 
 static void
 noit_check_set_recursive_dfs(xmlNodePtr node, char *path, int path_len)  {
@@ -129,15 +153,17 @@ noit_check_set_recursive_dfs(xmlNodePtr node, char *path, int path_len)  {
   int error_code = 0;
 
   if(!strcmp((char*) node->name, "check")) {
-    uuid = (char*)xmlGetProp(node, (xmlChar*) "uuid");
+
     if(uuid == NULL) {
       mtevL(noit_error, "Found a check node in the cluster message response without a uuid!\n");
     } else {
       mtevL(noit_error, "Found check in xml message: %s\n", uuid);
+      extract_attributes(node, &uuid);
+
       pats[0] = path;
       pats[1] = uuid;
 
-      noit_check_set_check(node, sizeof(pats), pats, &error, &error_code);
+      noit_check_set_check(node, sizeof(pats)/sizeof(char *), pats, &error, &error_code);
       xmlFree(uuid);
     }
 
@@ -160,10 +186,9 @@ noit_check_set_recursive_dfs(xmlNodePtr node, char *path, int path_len)  {
 
 static mtev_hook_return_t
 handle_response(void* closure, eventer_t e, const void *data, uint data_len) {
-  xmlDocPtr doc, check_doc;
+  xmlDocPtr doc;
   xmlNodePtr node;
-  int npats;
-  const char *path = "/";
+  char *path = "/";
 
   mtevL(noit_notice, "Received response : %s\n", (char* )data);
 
