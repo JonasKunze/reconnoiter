@@ -134,11 +134,12 @@ extract_attributes(xmlNodePtr node, char **uuid) {
       *uuid = (char*)value;
     } else {
       attr_node = xmlNewDocNode(node->doc, NULL, attribute->name, NULL);
+      xmlNodeSetContent(attr_node, value);
       xmlAddChild(attributes, attr_node);
 
       xmlFree(value);
-      attribute = attribute->next;
     }
+    attribute = attribute->next;
   }
 }
 
@@ -157,8 +158,8 @@ noit_check_set_recursive_dfs(xmlNodePtr node, char *path, int path_len)  {
     if(uuid == NULL) {
       mtevL(noit_error, "Found a check node in the cluster message response without a uuid!\n");
     } else {
-      mtevL(noit_error, "Found check in xml message: %s\n", uuid);
       extract_attributes(node, &uuid);
+      mtevL(noit_error, "Found check in xml message: %s\n", uuid);
 
       pats[0] = path;
       pats[1] = uuid;

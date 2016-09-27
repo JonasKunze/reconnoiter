@@ -578,7 +578,7 @@ noit_validate_check_rest_post_node(xmlNodePtr root, xmlNodePtr *a, xmlNodePtr *c
     *error = "invalid namespace provided";
     return 0;
   }
-      
+
   if(strcmp((char *)root->name, "check")) return 0;
   for(tl = root->children; tl; tl = tl->next) {
     if(!strcmp((char *)tl->name, "attributes")) {
