@@ -1748,21 +1748,7 @@ noit_get_check_xml_node(noit_check_t *check) {
   noit_check_xpath_check(xpath, sizeof(xpath), check);
 
   node = mtev_conf_get_section(NULL, xpath);
-<<<<<<< 3fe2f1f9f8b16db4c8a577631820b37de6e27373
-<<<<<<< 9781cb0cff1286239c5dda08fd6f076b5400eef6
   return node;
-=======
-
-  if(node) {
-    doc = xmlNewDoc((xmlChar *) "1.0");
-    node = xmlDocCopyNode(node, doc, 1);
-    xmlDocSetRootElement(doc, node);
-  }
-  return doc;
->>>>>>> Bugfix: node has to be copied when put to other xml doc
-=======
-  return node;
->>>>>>> Implemented noit_generate_checks_xml_doc
 }
 
 int
