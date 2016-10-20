@@ -1658,8 +1658,8 @@ noit_generate_checks_xml_doc(int64_t min_seq) {
   xmlNodePtr node, parent;
 
   xmlDocPtr doc;
-  xmlNodePtr root, *first_path_node;
-  uint number_of_path_nodes = 0;
+  xmlNodePtr root, *first_path_node, new_root;
+  uint number_of_path_nodes;
   const int max_path_nodes = 64;
   xmlNodePtr path_nodes[max_path_nodes];
 
@@ -1669,6 +1669,7 @@ noit_generate_checks_xml_doc(int64_t min_seq) {
 
   number_of_checks = noit_get_checks(min_seq, &checks);
   for(check_idx = 0; check_idx != number_of_checks; check_idx++) {
+    number_of_path_nodes = 0;
     current_check = checks[check_idx];
     node = noit_get_check_xml_node(current_check);
     parent = node->parent;
@@ -1684,10 +1685,12 @@ noit_generate_checks_xml_doc(int64_t min_seq) {
     }
     if(number_of_path_nodes != 0) {
       first_path_node = &path_nodes[max_path_nodes - number_of_path_nodes];
-      root = noit_create_paths(root, first_path_node, number_of_path_nodes);
+      new_root = noit_create_paths(root, first_path_node, number_of_path_nodes);
+    } else {
+      new_root = root;
     }
     node = xmlDocCopyNode(node, doc, 1);
-    xmlAddChild(root, node);
+    xmlAddChild(new_root, node);
   }
 
   return doc;
