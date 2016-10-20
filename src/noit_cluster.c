@@ -165,6 +165,9 @@ noit_check_set_recursive_dfs(xmlNodePtr node, char *path, int path_len)  {
       pats[1] = uuid;
 
       noit_check_set_check(node, sizeof(pats)/sizeof(char *), pats, &error, &error_code);
+      if(error) {
+        mtevL(noit_error, "Unable to store check from remote noit: %s\n", error);
+      }
       xmlFree(uuid);
     }
 
