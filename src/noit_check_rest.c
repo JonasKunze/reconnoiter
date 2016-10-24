@@ -1012,10 +1012,8 @@ rest_set_check(mtev_http_rest_closure_t *restc,
   mtev_http_response_xml(ctx, doc);
   mtev_http_response_end(ctx);
 
- cleanup:
-  if(uuid_conf) xmlFree(uuid_conf);
-  if(pobj) xmlXPathFreeObject(pobj);
   if(doc) xmlFreeDoc(doc);
+
   return 0;
 }
 
