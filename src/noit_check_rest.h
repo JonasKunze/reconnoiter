@@ -48,7 +48,7 @@ API_EXPORT(void)
   noit_check_rest_init();
 
 API_EXPORT(int)
-  noit_validate_check_rest_post(xmlDocPtr doc, xmlNodePtr *a, xmlNodePtr *c,
+noit_validate_check_rest_post_node(xmlDocPtr doc, xmlNodePtr *a, xmlNodePtr *c,
                                 const char **error);
 
 API_EXPORT(xmlNodePtr)
@@ -57,4 +57,6 @@ API_EXPORT(xmlNodePtr)
 API_EXPORT(struct json_object *)
   noit_check_state_as_json(noit_check_t *check, int full);
 
+API_EXPORT(mtev_boolean)
+  noit_check_set_check(xmlDocPtr check_doc, int npats, char **pats, const char **error, int *error_code);
 #endif
